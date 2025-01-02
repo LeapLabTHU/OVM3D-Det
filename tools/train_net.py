@@ -44,16 +44,18 @@ from cubercnn.evaluation import (
     inference_on_dataset
 )
 from cubercnn.modeling.proposal_generator import RPNWithIgnore
-from cubercnn.modeling.roi_heads import ROIHeads3D
-from cubercnn.modeling.meta_arch import RCNN3D, build_model
+from cubercnn.modeling.roi_heads import ROIHeads3D_Text
+from cubercnn.modeling.meta_arch import RCNN3D_text, build_model
 from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
 from cubercnn import util, vis, data
 import cubercnn.vis.logperf as utils_logperf
 
+from transformers import BertTokenizer, BertModel
+
 MAX_TRAINING_ATTEMPTS = 10
 
 
-def do_test(cfg, model, iteration='final', storage=None):
+def do_test(cfg, model, text_embeddings, iteration='final', storage=None):
         
     filter_settings = data.get_filter_settings_from_cfg(cfg)    
     filter_settings['visibility_thres'] = cfg.TEST.VISIBILITY_THRES
@@ -84,7 +86,7 @@ def do_test(cfg, model, iteration='final', storage=None):
         Distributed Cube R-CNN inference
         '''
         data_loader = build_detection_test_loader(cfg, dataset_name)
-        results_json = inference_on_dataset(model, data_loader)
+        results_json = inference_on_dataset(model, data_loader, text_embeddings)
 
         if comm.is_main_process():
             
@@ -98,13 +100,13 @@ def do_test(cfg, model, iteration='final', storage=None):
             '''
             Optionally, visualize some instances
             '''
-            instances = torch.load(os.path.join(output_folder, dataset_name, 'instances_predictions.pth'))
-            log_str = vis.visualize_from_instances(
-                instances, data_loader.dataset, dataset_name, 
-                cfg.INPUT.MIN_SIZE_TEST, os.path.join(output_folder, dataset_name), 
-                MetadataCatalog.get('omni3d_model').thing_classes, iteration
-            )
-            logger.info(log_str)
+            # instances = torch.load(os.path.join(output_folder, dataset_name, 'instances_predictions.pth'))
+            # log_str = vis.visualize_from_instances(
+            #     instances, data_loader.dataset, dataset_name, 
+            #     cfg.INPUT.MIN_SIZE_TEST, os.path.join(output_folder, dataset_name), 
+            #     MetadataCatalog.get('omni3d_model').thing_classes, iteration
+            # )
+            # logger.info(log_str)
 
     if comm.is_main_process():
         
@@ -114,7 +116,7 @@ def do_test(cfg, model, iteration='final', storage=None):
         eval_helper.summarize_all()
 
 
-def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=False):
+def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, text_embeddings, resume=False):
 
     max_iter = cfg.SOLVER.MAX_ITER
     do_eval = cfg.TEST.EVAL_PERIOD > 0
@@ -179,7 +181,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
             storage.iter = iteration
 
             # forward
-            loss_dict = model(data)
+            loss_dict = model(data, text_embeddings)
             losses = sum(loss_dict.values())
 
             # reduce
@@ -291,7 +293,7 @@ def do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=F
                 (do_eval and ((iteration + 1) % cfg.TEST.EVAL_PERIOD) == 0 and iteration != (max_iter - 1)):
 
                 logger.info('Starting test for iteration {}'.format(iteration+1))
-                do_test(cfg, model, iteration=iteration+1, storage=storage)
+                do_test(cfg, model, text_embeddings, iteration=iteration+1, storage=storage)
                 comm.synchronize()
                 
                 if not cfg.MODEL.USE_BN: 
@@ -320,6 +322,7 @@ def setup(args):
     Create configs and perform basic setups.
     """
     cfg = get_cfg()
+    cfg.set_new_allowed(True)
     get_cfg_defaults(cfg)
 
     config_file = args.config_file
@@ -338,13 +341,13 @@ def setup(args):
     filter_settings = data.get_filter_settings_from_cfg(cfg)
 
     for dataset_name in cfg.DATASETS.TRAIN:
-        simple_register(dataset_name, filter_settings, filter_empty=True)
+        simple_register(dataset_name, filter_settings, folder_name=cfg.DATASETS.FOLDER_NAME, filter_empty=True)
     
     dataset_names_test = cfg.DATASETS.TEST
 
     for dataset_name in dataset_names_test:
         if not(dataset_name in cfg.DATASETS.TRAIN):
-            simple_register(dataset_name, filter_settings, filter_empty=False)
+            simple_register(dataset_name, filter_settings, folder_name=cfg.DATASETS.FOLDER_NAME, filter_empty=False)
     
     return cfg
 
@@ -361,7 +364,7 @@ def main(args):
 
     if args.eval_only:
         category_path = os.path.join(util.file_parts(args.config_file)[0], 'category_meta.json')
-        
+
         # store locally if needed
         if category_path.startswith(util.CubeRCNNHandler.PREFIX):
             category_path = util.CubeRCNNHandler._get_local_path(util.CubeRCNNHandler, category_path)
@@ -377,7 +380,7 @@ def main(args):
     else: 
 
         # setup and join the data.
-        dataset_paths = [os.path.join('datasets', 'Omni3D', name + '.json') for name in cfg.DATASETS.TRAIN]
+        dataset_paths = [os.path.join('datasets', cfg.DATASETS.FOLDER_NAME, name + '.json') for name in cfg.DATASETS.TRAIN]
         datasets = data.Omni3D(dataset_paths, filter_settings=filter_settings)
 
         # determine the meta data given the datasets used. 
@@ -422,7 +425,21 @@ def main(args):
 
         # compute priors given the training data.
         priors = util.compute_priors(cfg, datasets)
-    
+
+
+    # Load the BERT model and obtain the text embeddings of the categories.
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    model = BertModel.from_pretrained('bert-base-uncased')
+
+    thing_classes.append('None')
+    texts = thing_classes
+
+    inputs = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
+    outputs = model(**inputs)
+
+    encoded_texts = outputs.last_hidden_state
+    text_embeddings = encoded_texts[:,1:-1,:].mean(dim=1).cuda().detach()
+
     '''
     The training loops can attempt to train for N times.
     This catches a divergence or other failure modes. 
@@ -443,7 +460,7 @@ def main(args):
             DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
                 cfg.MODEL.WEIGHTS, resume=args.resume
             )
-            return do_test(cfg, model)
+            return do_test(cfg, model, text_embeddings)
 
         # setup distributed training.
         distributed = comm.get_world_size() > 1
@@ -454,7 +471,7 @@ def main(args):
             )
 
         # train full model, potentially with resume.
-        if do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, resume=args.resume):
+        if do_train(cfg, model, dataset_id_to_unknown_cats, dataset_id_to_src, text_embeddings, resume=args.resume):
             break
         else:
 
@@ -465,8 +482,8 @@ def main(args):
     if remaining_attempts == 0:
         # Exit if the model could not finish without diverging. 
         raise ValueError('Training failed')
-        
-    return do_test(cfg, model)
+
+    return do_test(cfg, model, text_embeddings)
 
 def allreduce_dict(input_dict, average=True):
     """

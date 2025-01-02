@@ -78,6 +78,34 @@ def get_filter_settings_from_cfg(cfg=None):
             'max_height_thres': 1.50,
         }
 
+def get_filter_settings_from_cfg_test(cfg=None):
+
+    if cfg is None:
+        return {
+            'category_names': [], 
+            'ignore_names': [], 
+            'truncation_thres': 0.99, 
+            'visibility_thres': 0.01,
+            'min_height_thres': 0.00,
+            'max_height_thres': 1.50,
+            'modal_2D_boxes': False,
+            'trunc_2D_boxes': False,
+            'max_depth': 1e8,
+        }
+    else:
+        return {
+            'category_names': cfg.DATASETS.CATEGORY_NAMES_TEST, 
+            'ignore_names': cfg.DATASETS.IGNORE_NAMES, 
+            'truncation_thres': cfg.DATASETS.TRUNCATION_THRES, 
+            'visibility_thres': cfg.DATASETS.VISIBILITY_THRES,
+            'min_height_thres': cfg.DATASETS.MIN_HEIGHT_THRES,
+            'modal_2D_boxes': cfg.DATASETS.MODAL_2D_BOXES,
+            'trunc_2D_boxes': cfg.DATASETS.TRUNC_2D_BOXES,
+            'max_depth': cfg.DATASETS.MAX_DEPTH,
+            
+            # TODO expose as a config
+            'max_height_thres': 1.50,
+        }
 
 def is_ignore(anno, filter_settings, image_height):
 
@@ -122,11 +150,14 @@ def is_ignore(anno, filter_settings, image_height):
     return ignore
 
 
-def simple_register(dataset_name, filter_settings, filter_empty=False, datasets_root_path=None):
+def simple_register(dataset_name, filter_settings, folder_name='Omni3D', filter_empty=False, datasets_root_path=None):
 
     if datasets_root_path is None:
-        datasets_root_path = path_to_json = os.path.join('datasets', 'Omni3D',)
-    
+        if dataset_name.split('_')[1] == 'test':
+            datasets_root_path = path_to_json = os.path.join('datasets', 'Omni3D')
+        else:
+            datasets_root_path = path_to_json = os.path.join('datasets', folder_name,)
+
     path_to_json = os.path.join(datasets_root_path, dataset_name + '.json')
     path_to_image_root = 'datasets'
 

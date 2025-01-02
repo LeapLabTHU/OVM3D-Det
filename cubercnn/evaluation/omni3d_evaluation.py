@@ -306,7 +306,7 @@ class Omni3DEvaluationHelper:
         results = self.results[dataset_name]
 
         logger.info('\n'+results['log_str_2D'].replace('mode=2D', '{} iter={} mode=2D'.format(dataset_name, self.iter_label)))
-            
+        
         # store the partially accumulated evaluations per category per area
         for key, item in results['bbox_2D_evals_per_cat_area'].items():
             if not key in self.evals_per_cat_area2D:
@@ -519,7 +519,7 @@ class Omni3DEvaluationHelper:
         utils_logperf.print_ap_omni_histogram(self.results_omni3d)
 
 
-def inference_on_dataset(model, data_loader):
+def inference_on_dataset(model, data_loader, text_embeddings):
     """
     Run model on the data_loader. 
     Also benchmark the inference speed of `model.__call__` accurately.
@@ -568,7 +568,7 @@ def inference_on_dataset(model, data_loader):
                 total_eval_time = 0
 
             start_compute_time = time.perf_counter()
-            outputs = model(inputs)
+            outputs = model(inputs, text_embeddings)
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
             total_compute_time += time.perf_counter() - start_compute_time
@@ -1260,8 +1260,8 @@ class Omni3Deval(COCOeval):
                     tps = np.logical_and(               dtm,  np.logical_not(dtIg) )
                     fps = np.logical_and(np.logical_not(dtm), np.logical_not(dtIg) )
 
-                    tp_sum = np.cumsum(tps, axis=1).astype(dtype=np.float)
-                    fp_sum = np.cumsum(fps, axis=1).astype(dtype=np.float)
+                    tp_sum = np.cumsum(tps, axis=1).astype(dtype=np.float64)
+                    fp_sum = np.cumsum(fps, axis=1).astype(dtype=np.float64)
 
                     for t, (tp, fp) in enumerate(zip(tp_sum, fp_sum)):
                         tp = np.array(tp)

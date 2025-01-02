@@ -3,7 +3,11 @@ datasets/*
 .vscode/
 .ipynb_checkpoints/
 .idea/
-output/
+output/*
+checkpoints/*
+pseudo_label/*
+third_party/detectron2
+
 cubercnn/external/
 
 # filetypes

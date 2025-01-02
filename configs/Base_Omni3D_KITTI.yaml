@@ -1,0 +1,22 @@
+_BASE_: "Base.yaml"
+SOLVER:
+  TYPE: "sgd"
+  IMS_PER_BATCH: 16
+  BASE_LR: 0.01
+  STEPS: (17400, 23200)
+  MAX_ITER: 29000
+  WARMUP_ITERS: 906
+TEST:
+  EVAL_PERIOD: 7250
+VIS_PERIOD: 580
+DATASETS:
+  TRAIN: ('KITTI_train', 'KITTI_val')
+  TEST: ('KITTI_test',)
+  CATEGORY_NAMES: ('pedestrian', 'car', 'cyclist', 'van', 'truck')
+  FOLDER_NAME: 'Omni3D_pl'
+MODEL:
+  META_ARCHITECTURE: RCNN3D_text
+  ROI_HEADS:
+    NAME : ROIHeads3D_Text
+    NUM_CLASSES: 5
+  STABILIZE: 0.5

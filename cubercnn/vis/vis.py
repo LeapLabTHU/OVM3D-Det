@@ -90,7 +90,8 @@ def visualize_from_instances(detections, dataset, dataset_name, min_size_test, o
     ry_errors = []
 
     n_cats = len(category_names_official)
-    thres = np.sqrt(1/n_cats)
+    # thres = np.sqrt(1/n_cats)
+    thres = 0.3
 
     for imind, im_obj in enumerate(detections):
         
