@@ -64,7 +64,7 @@ We utilize four datasets from Omni3D: `KITTI`, `nuScenes`, `SUN RGB-D` and `ARKi
 
 
 ## Pseudo-Label Generation
-We provide pre-generated pseudo labels in the datasets/Omni3D_pl folder. To generate pseudo labels yourself, follow these steps by running:
+We provide pre-generated pseudo labels [here](https://drive.google.com/drive/folders/1SsmnElIFlz_7yPWkAhkc_QVIlhtj53LE?usp=drive_link) for the training and validation sets. Please place them in the `datasets` folder. To generate pseudo labels yourself, follow these steps by running:
 ```bash
 bash scripts/generate_pseudo_label.sh DATASET
 ```
