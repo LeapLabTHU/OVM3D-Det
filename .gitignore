@@ -1,5 +1,6 @@
 # folders or files
 datasets/*
+!datasets/Omni3D
 .vscode/
 .ipynb_checkpoints/
 .idea/
