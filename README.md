@@ -1,4 +1,4 @@
-# OVM3D-Det
+# OVM3D-Det (NeurIPS 2024)
 
 **Training an Open-Vocabulary Monocular 3D Object Detection Model without 3D Data**
 
